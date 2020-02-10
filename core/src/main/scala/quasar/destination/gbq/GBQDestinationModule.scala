@@ -30,7 +30,8 @@ import cats.effect.{
   ConcurrentEffect, 
   ContextShift, 
   Resource, 
-  Timer}
+  Timer
+}
 import cats.data.EitherT
 import cats.implicits._
 

@@ -26,10 +26,7 @@ env:
     - secure: "UzmJ9EyiOiW/pBRE0Mbe2Sh4hy9h4lHNlSosqTSTlr1FqGXoD+sZN2kEFoZKqOqL8plUAT2+xJiFG0T52ed5jLd5vp+RWmpHrQwWhq9iRYVXrcHOyAM/6cPZdXX5/wGrBekZBtC6q9U9ylrkPj24GSRqTSI0OkOvs7HJOJHUhKowDUlDrZXbOP5QiiEB95elmdE/MBPCAMtVbONrHh376LsWRu/BJaNRX+DxZJWks63MaNRJRdgYVOBZdORYKfroAqk5Xh9CaiA2gaEagbNvOXEIdfitrqt///VdiZYBZUZLAX+hh6jS9pla6js8ZUCBgVevXqMOK4TY3z62vKty197CFhhd0EB39TtDQcgp33z9ar6QKQQk12SejczluqMbILD9bPc4ROycEHiJHZkc/MZZHHoLqYc5oit0/Sh5H/bH2y64k3Pij2EAQxtYG/t3MZBh1bw0nJUarAAn1UgDZ49k9Fx3jh37uGSFZgV1BMO/tjQ8+S/7Te8zHg0rZaVSc3R724dipyTz+pllwuI1qT5O2BzvEc7rQr0xNdZS9gT3DAxMsaeCEMl/2s2lW1I4Cu04nz7mTVc8yCD44PEbmnEgIGjHzfM8wu9DJRFm5fGkF1h74XPtObdG/0CchhDuUWLtroGlJOAVOwJ6hHwCzpEC5v87iYf/6IIi3WrS4hA="
 
 before_install:
-
-
-
-before_install:
+  #- set -e
   - sudo service ntp stop
   - sudo ntpd -gq
   - sudo service ntp start

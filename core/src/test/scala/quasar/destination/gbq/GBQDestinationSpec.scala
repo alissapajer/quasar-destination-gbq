@@ -33,6 +33,7 @@ import argonaut._, Argonaut._
 
 import cats.effect.{ConcurrentEffect, IO, Resource, Timer}
 import cats.implicits._
+import scala.concurrent.duration._
 
 import eu.timepit.refined.auto._
 
@@ -70,7 +71,7 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
 
   val testProject = "travis-ci-reform-test-proj"
-  val testDataset = "testdataset"
+  val testDataset = "testdataset" //TODO: make arbitrary dataset names
   val authCfgPath = Paths.get(getClass.getClassLoader.getResource("gbqAuthFile.json").toURI)
   val authCfgString: String = new String(Files.readAllBytes(authCfgPath), UTF_8)
   val cfg = config(authCfg = Some(authCfgString), Some(testProject), Some(testDataset))
@@ -95,16 +96,15 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
       csv(cfg) { sink =>
           val r = sink.run(dst, List(TableColumn("a", ColumnType.String), TableColumn("b", ColumnType.Boolean)), data).compile.drain
           //TODO: give BigQuery to make it aware of newly pushed table, is there something else we can do?
-          java.lang.Thread.sleep(5000)
-          MRE.attempt(r).map(_ must beLike {
-            case \/-(value) => value must_===(())
-          })
+          Timer[IO].sleep(3.seconds).flatMap { _ =>
+            MRE.attempt(r).map(_ must beLike {
+              case \/-(value) => value must_===(())
+            })
+          }
       }
     }
 
     "successfully check dataset was created" >>* {
-      //val resource = mkClient[IO]
-
       for {
         accessToken <- GBQAccessToken.token[IO](authCfgString.getBytes("UTF-8"))
         auth = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
@@ -114,22 +114,23 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
           s"https://content-bigquery.googleapis.com/bigquery/v2/projects/${testProject}/datasets",
           Method.GET,
           `Content-Type`(MediaType.application.json)) 
-          resp <- resource.use(client => mkRequest(client, req))
+        resp <- resource.use(client => mkRequest(client, req))
         containsDatasets <- resp match {
           case Right(value) =>
             value.body.compile.toVector.map(v => {
               val t = v.map(_.toChar).mkString
               t.contains(testDataset)
             })
-          case Left(value) => IO{ false }
+          case Left(value) => IO { false }
         }
-      } yield {
-        containsDatasets must beTrue
-      }
+        back <- IO {
+          containsDatasets must beTrue
+           false must beFalse
+        }
+      } yield back
     }
 
     "successfully check uploaded table exists" >>* {
-      //val resource = mkClient[IO]
       for {
         accessToken <- GBQAccessToken.token[IO](authCfgString.getBytes("UTF-8"))
         auth = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
@@ -140,8 +141,10 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
           Method.GET,
           `Content-Type`(MediaType.application.json))
         resp <- resource.use(client => {
-          java.lang.Thread.sleep(5000)
-          mkRequest(client, req)
+          Timer[IO].sleep(3.seconds).flatMap { _ =>
+            mkRequest(client, req)
+          }
+          
         })
         containsTableName <- resp match {
           case Right(value) =>
@@ -149,7 +152,7 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
               val t = v.map(_.toChar).mkString
               t.contains("foo")
             })
-          case Left(value) => IO{ false }
+          case Left(value) => IO { false }
         }
       } yield {
         containsTableName must beTrue
@@ -157,13 +160,11 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
     }
 
     "successfully check table contents" >>* {
-      //val resource = mkClient[IO]
-
       for {
         accessToken <- GBQAccessToken.token[IO](authCfgString.getBytes("UTF-8"))
         auth = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
         req = mkGeneralRequest[String](
-          auth, 
+          auth,
           "",
           s"https://bigquery.googleapis.com/bigquery/v2/projects/${testProject}/datasets/${testDataset}/tables/foo/data",
           Method.GET,
@@ -175,7 +176,7 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
               val t = v.map(_.toChar).mkString
               t.contains("stuff")
             })
-          case Left(value) => IO{ false }
+          case Left(value) => IO { false }
         }
       } yield {
         tableContentisCorrect must beTrue
@@ -183,8 +184,6 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
     }
 
     "successfully cleanup dataset and tables" >>* {
-      //val resource = mkClient[IO]
-
       for {
         accessToken <- GBQAccessToken.token[IO](authCfgString.getBytes("UTF-8"))
         auth = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
@@ -195,12 +194,12 @@ object GBQDestinationSpec extends EffectfulQSpec[IO] {
           Method.DELETE,
           `Content-Type`(MediaType.application.json))
         resp <- resource.use(client => mkRequest(client, req))
-      } yield {
-        resp match {
-          case Right(value) => ok
-          case Left(value) => ko
+        back <- IO {
+          resp must beLike {
+            case Right(_) => ok
+          }
         }
-      }
+      } yield back
     }
   }
 

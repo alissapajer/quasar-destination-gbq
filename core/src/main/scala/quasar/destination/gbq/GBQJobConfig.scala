@@ -32,8 +32,7 @@ final case class GBQJobConfig(
   schema: List[GBQSchema], 
   timePartition: Option[String],
   writeDisposition: WriteDisposition,
-  destinationTable: GBQDestinationTable,
-)
+  destinationTable: GBQDestinationTable)
 
 object GBQJobConfig {
 

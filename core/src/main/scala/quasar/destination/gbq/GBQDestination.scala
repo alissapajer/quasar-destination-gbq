@@ -31,8 +31,6 @@ import cats.ApplicativeError
 import cats.effect.{Concurrent, ContextShift, Resource, Sync}
 import cats.implicits._
 
-import com.google.auth.oauth2.AccessToken
-
 import eu.timepit.refined.auto._
 
 import fs2.Stream
@@ -45,7 +43,8 @@ import org.http4s.{
   Method,
   Request,
   Status,
-  Uri}
+  Uri
+}
 import org.http4s.argonaut.jsonEncoderOf
 import org.http4s.client.Client
 import org.http4s.headers.{Authorization, `Content-Type`, Location}
@@ -79,14 +78,14 @@ final class GBQDestination[F[_]: Concurrent: ContextShift: MonadResourceErr](
         tableName <- Stream.eval[F, String](tableNameF)
         gbqJobConfig = formGBQJobConfig(gbqSchema, config, tableName)
         accessToken <- Stream.eval(GBQAccessToken.token(config.authCfg.getBytes("UTF-8")))
-        _ <- Stream.eval((mkDataset(client, accessToken, config)))
-        eitherloc <- Stream.eval(mkGbqJob(client, accessToken, gbqJobConfig))
+        _ <- Stream.eval((mkDataset(client, accessToken.getTokenValue, config)))
+        eitherloc <- Stream.eval(mkGbqJob(client, accessToken.getTokenValue, gbqJobConfig))
         _ <- Stream.eval(
           Sync[F].delay(
             log.info(s"(re)creating ${config.project}.${config.datasetId}.${tableName} with schema ${columns.show}")))
         _ <- eitherloc match {
             case Right(locationUri) => {
-              upload(client, bytes, locationUri, accessToken)
+              upload(client, bytes, locationUri, accessToken.getTokenValue)
             }
             case Left(e) =>
               Stream.eval(Sync[F].delay(ApplicativeError[F, Throwable].raiseError(
@@ -131,13 +130,13 @@ final class GBQDestination[F[_]: Concurrent: ContextShift: MonadResourceErr](
 
   private def mkDataset(
       client: Client[F],
-      accessToken: AccessToken,
+      accessToken: String,
       config: GBQConfig)
       : F[Either[InitializationError[Json], Unit]] = {
     implicit def jobConfigEntityEncoder: EntityEncoder[F, GBQDatasetConfig] = jsonEncoderOf[F, GBQDatasetConfig]
 
     val dCfg = GBQDatasetConfig(config.project, config.datasetId)
-    val bearerToken = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
+    val bearerToken = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken))
     val datasetReq = Request[F](
       method = Method.POST,
       uri = Uri.fromString(s"https://bigquery.googleapis.com/bigquery/v2/projects/${config.project}/datasets").getOrElse(Uri()))
@@ -159,12 +158,12 @@ final class GBQDestination[F[_]: Concurrent: ContextShift: MonadResourceErr](
 
   private def mkGbqJob(
       client: Client[F],
-      accessToken: AccessToken,
+      accessToken: String,
       jCfg: GBQJobConfig): F[Either[InitializationError[Json], Uri]] = {
 
     implicit def jobConfigEntityEncoder: EntityEncoder[F, GBQJobConfig] = jsonEncoderOf[F, GBQJobConfig]
 
-    val authToken = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
+    val authToken = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken))
     val jobReq = Request[F](
       method = Method.POST,
       uri = Uri.fromString(s"https://bigquery.googleapis.com/upload/bigquery/v2/projects/${jCfg.destinationTable.project}/jobs?uploadType=resumable").getOrElse(Uri()))
@@ -186,8 +185,8 @@ final class GBQDestination[F[_]: Concurrent: ContextShift: MonadResourceErr](
     }
   }
 
-  private def upload(client: Client[F], bytes: Stream[F, Byte], uploadLocation: Uri, accessToken: AccessToken): Stream[F, Unit] = {
-    val bearerToken = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken.getTokenValue))
+  private def upload(client: Client[F], bytes: Stream[F, Byte], uploadLocation: Uri, accessToken: String): Stream[F, Unit] = {
+    val bearerToken = Authorization(Credentials.Token(AuthScheme.Bearer, accessToken))
     val destReq = Request[F](method = Method.POST, uri = uploadLocation)
         .withHeaders(bearerToken)
         .withContentType(`Content-Type`(MediaType.application.`octet-stream`))
@@ -205,9 +204,9 @@ final class GBQDestination[F[_]: Concurrent: ContextShift: MonadResourceErr](
 }
 
 object GBQDestination {
-    def apply[F[_]: Concurrent: ContextShift: MonadResourceErr, C](client: Client[F], config: GBQConfig, sanitizedConfig: Json)
-        : Resource[F, Either[InitializationError[C], Destination[F]]] = {
-      val x: Either[InitializationError[C], Destination[F]] = new GBQDestination[F](client, config, sanitizedConfig).asRight[InitializationError[C]]
-      Resource.liftF(x.pure[F])
-    }
+  def apply[F[_]: Concurrent: ContextShift: MonadResourceErr, C](client: Client[F], config: GBQConfig, sanitizedConfig: Json)
+      : Resource[F, Either[InitializationError[C], Destination[F]]] = {
+    val x: Either[InitializationError[C], Destination[F]] = new GBQDestination[F](client, config, sanitizedConfig).asRight[InitializationError[C]]
+    Resource.liftF(x.pure[F])
+  }
 }

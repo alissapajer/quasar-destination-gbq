@@ -63,6 +63,6 @@ object GBQJobConfigSpec extends Specification {
   }
 
   "encode GBQJobConfig to json" >> {
-    testJobCfg.asJson === jsonJobCfg
+    testJobCfg.asJson must_=== jsonJobCfg
   }
 }
